@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>TRACKS — Vehicle Network Monitor</title>
+<link rel="stylesheet" href="/static/vendor/leaflet.min.css"/>
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css"/>
+<style>
+:root {
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e28;--bg4:#222736;
+  --border:#2a3040;--text:#e8eaf0;--muted:#6b7280;
+  --green:#1aff8c;--green-d:#0ab55e;--red:#ff4d4d;--amber:#ffb020;
+  --blue:#3b8bd4;--purple:#7f77dd;
+  --accent:#E96B1D;--accent-dim:rgba(233,107,29,0.6);--accent-bg:rgba(233,107,29,0.12);--accent-border:rgba(233,107,29,0.5);
+  --font:'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --mono:'Courier New',monospace;
+  --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
+a{color:var(--blue);text-decoration:none}
+
+/* Layout */
+.app{display:grid;grid-template-columns:200px 1fr;grid-template-rows:48px 1fr;min-height:100vh}
+.header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--accent);letter-spacing:0.06em}
+.logo img{width:28px;height:28px;border-radius:4px}
+.status-pill{display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);font-size:12px;font-family:var(--mono)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot.amber{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot.red{background:var(--red);box-shadow:0 0 6px var(--red)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.iface{padding:3px 8px;border-radius:6px;background:var(--bg4);border:1px solid var(--border);font-size:11px;font-family:var(--mono);color:var(--muted)}
+.iface.active{color:var(--accent);border-color:var(--accent-border)}
+
+/* Sidebar */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:12px 0;overflow-y:auto}
+.nav-label{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;padding:10px 14px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:var(--muted);border-radius:0;transition:all .15s}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--accent-bg);color:var(--accent)}
+.nav-item i{font-size:16px}
+.nav-sep{height:1px;background:var(--border);margin:8px 12px}
+
+/* Main */
+.main{padding:14px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+.kpi-label{font-size:11px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.kpi-label i{font-size:13px}
+.kpi-val{font-size:22px;font-family:var(--mono);font-weight:600;line-height:1}
+.kpi-val.good{color:var(--green)}.kpi-val.warn{color:var(--amber)}.kpi-val.bad{color:var(--red)}
+.kpi-sub{font-size:10px;color:var(--muted);margin-top:4px}
+
+/* Grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+/* Panel */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.panel-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.panel-hdr i{font-size:15px}
+.panel-title{font-size:13px;font-weight:600;flex:1}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--mono)}
+.badge-green{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border)}
+.badge-amber{background:rgba(255,176,32,.1);color:var(--amber);border:1px solid var(--amber)}
+.badge-red{background:rgba(255,77,77,.1);color:var(--red);border:1px solid var(--red)}
+.btn{padding:5px 12px;border-radius:7px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;cursor:pointer;font-family:var(--font);transition:all .15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+select,input[type=text],input[type=number]{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:4px 8px;font-size:12px;font-family:var(--mono);outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+
+/* Map */
+#map{height:320px;border-radius:8px;z-index:1}
+.leaflet-container{background:var(--bg3)!important}
+.gps-bar{display:flex;gap:14px;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px}
+.gps-bar span{color:var(--text)}
+
+/* Chart */
+.chart-wrap{position:relative;height:180px}
+.chart-wrap canvas{width:100%!important;height:100%!important}
+
+/* Hop table */
+.hop-list{max-height:240px;overflow-y:auto}
+.hop{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--mono)}
+.hop:last-child{border-bottom:none}
+.hop-n{width:22px;color:var(--muted);text-align:right}
+.hop-ip{flex:1;color:var(--text)}
+.hop-bar{flex:0 0 60px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.hop-fill{height:100%;border-radius:2px}
+.hop-ms{width:50px;text-align:right}
+
+/* Speedtest */
+.speed-result{background:var(--bg3);border-radius:8px;padding:12px;font-family:var(--mono)}
+.speed-row{display:flex;gap:24px;align-items:baseline;margin-bottom:6px}
+.speed-val{font-size:20px;font-weight:600}
+.speed-unit{font-size:11px;color:var(--muted)}
+.speed-label{font-size:9px;color:var(--muted);margin-bottom:2px}
+.speed-meta{font-size:9px;color:var(--muted)}
+
+/* Grafana link bar */
+.grafana-bar{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;font-size:12px}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;margin-bottom:10px}
+.tab{padding:5px 14px;border-radius:7px 7px 0 0;background:var(--bg3);border:1px solid var(--border);border-bottom:none;font-size:12px;cursor:pointer;color:var(--muted)}
+.tab.active{background:var(--bg2);color:var(--green);border-color:var(--green-d)}
+
+/* Sections */
+.section{display:flex;flex-direction:column;gap:12px}
+
+/* Hop chain visual */
+.hop-chain{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-start;gap:0;overflow-x:auto;padding:8px 0}
+.hop-node{display:flex;flex-direction:column;align-items:center;min-width:78px;flex-shrink:0}
+.hop-circle{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:2px solid;background:var(--bg2);position:relative;z-index:2}
+.hop-circle.hc-good{border-color:var(--green);color:var(--green)}
+.hop-circle.hc-warn{border-color:var(--amber);color:var(--amber)}
+.hop-circle.hc-bad{border-color:var(--red);color:var(--red)}
+.hop-circle.hc-unknown{border-color:var(--muted);color:var(--muted)}
+.hop-detail{text-align:center;margin-top:6px}
+.hop-detail-ip{font-size:10px;font-family:var(--mono);color:var(--muted);max-width:88px;word-break:break-all}
+.hop-detail-rtt{font-size:11px;font-weight:600;margin-top:1px}
+.hop-detail-loss{font-size:9px;color:var(--red)}
+.hop-connector{display:flex;align-items:center;padding-top:10px;flex-shrink:0}
+.hop-line{height:2px;width:24px;background:var(--border)}
+
+/* Traceroute timeline */
+.tr-tick{width:6px;height:40px;border-radius:3px;cursor:pointer;transition:transform .15s;flex-shrink:0}
+.tr-tick:hover{transform:scaleY(1.3)}
+.tr-tick.selected{outline:2px solid var(--text);outline-offset:2px}
+.tr-tick-good{background:var(--green)}
+.tr-tick-warn{background:var(--amber)}
+.tr-tick-bad{background:var(--red)}
+
+/* Traceroute diff */
+.tr-diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tr-diff-col{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tr-diff-hdr{padding:8px 12px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;background:var(--bg3)}
+.tr-diff-row{display:flex;align-items:center;gap:6px;padding:5px 12px;font-size:11px;font-family:var(--mono);border-bottom:1px solid var(--border)}
+.tr-diff-row:last-child{border-bottom:none}
+.tr-diff-row.tr-changed{background:rgba(255,176,32,.1)}
+.tr-diff-row.tr-added{background:rgba(26,255,140,.1)}
+.tr-diff-row.tr-removed{background:rgba(255,77,77,.1)}
+
+/* Speed test spinner */
+@keyframes st-spin{to{transform:rotate(360deg)}}
+.st-spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:st-spin .8s linear infinite}
+@keyframes st-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.st-dot-active{animation:st-pulse 1s infinite}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo"><img src="/static/vendor/kiwirail-icon.png" alt="KiwiRail">TRACKS</div>
+    <div class="status-pill"><div class="dot" id="live-dot"></div><span id="live-label">Connecting...</span></div>
+    <div id="iface-badges"></div>
+    <div class="header-right">
+      <div class="status-pill"><div class="dot" id="gps-dot"></div><span id="gps-label">GPS</span></div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="nav-label">Monitor</div>
+    <div class="nav-item active" data-section="overview"><i class="ti ti-layout-dashboard"></i>Overview</div>
+    <div class="nav-item" data-section="map"><i class="ti ti-map-2"></i>Map & GPS</div>
+    <div class="nav-item" data-section="latency"><i class="ti ti-activity"></i>Latency / Jitter</div>
+    <div class="nav-item" data-section="traceroute"><i class="ti ti-route"></i>Traceroute</div>
+    <div class="nav-item" data-section="speedtest"><i class="ti ti-gauge"></i>Speed Test</div>
+    <div class="nav-item" data-section="starlink"><i class="ti ti-satellite"></i>Starlink</div>
+    <div class="nav-sep"></div>
+    <div class="nav-label">Analyse</div>
+    <div class="nav-item" data-section="badspots"><i class="ti ti-map-pin"></i>Bad Spots</div>
+    <div class="nav-item" data-section="history"><i class="ti ti-history"></i>History (24h)</div>
+    <div class="nav-sep"></div>
+    <div class="nav-label">Configure</div>
+    <div class="nav-item" data-section="settings"><i class="ti ti-settings"></i>Settings</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main" id="main">
+
+    <!-- KPI Row (always visible) -->
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-label"><i class="ti ti-clock"></i>Latency</div><div class="kpi-val good" id="kpi-lat">--</div><div class="kpi-sub" id="kpi-lat-sub">--</div></div>
+      <div class="kpi"><div class="kpi-label"><i class="ti ti-wave-sine"></i>Jitter</div><div class="kpi-val good" id="kpi-jit">--</div><div class="kpi-sub" id="kpi-jit-sub">--</div></div>
+      <div class="kpi"><div class="kpi-label"><i class="ti ti-package-off"></i>Pkt Loss</div><div class="kpi-val good" id="kpi-loss">--</div><div class="kpi-sub" id="kpi-loss-sub">--</div></div>
+      <div class="kpi"><div class="kpi-label"><i class="ti ti-map-pin"></i>Position</div><div class="kpi-val" id="kpi-pos" style="font-size:13px">--</div><div class="kpi-sub" id="kpi-pos-sub">--</div></div>
+    </div>
+
+    <!-- OVERVIEW section -->
+    <div class="section" data-view="overview">
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-hdr">
+            <i class="ti ti-map-2" style="color:var(--accent)"></i>
+            <span class="panel-title">Route map</span>
+            <span class="badge badge-amber" id="badspot-count">-- bad spots</span>
+          </div>
+          <div id="map"></div>
+          <div class="gps-bar">
+            Lat <span id="gps-lat">--</span>
+            Lon <span id="gps-lon">--</span>
+            Speed <span id="gps-speed">--</span>
+            Hdg <span id="gps-hdg">--</span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-hdr">
+            <i class="ti ti-activity" style="color:var(--purple)"></i>
+            <span class="panel-title">Latency</span>
+          </div>
+          <div class="chart-wrap"><canvas id="latChart"></canvas></div>
+          <div style="margin-top:12px">
+            <div class="panel-hdr" style="margin-bottom:4px">
+              <span class="panel-title" style="font-size:12px">Packet loss</span>
+            </div>
+            <div class="chart-wrap" style="height:120px"><canvas id="lossChartOverview"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-hdr">
+            <i class="ti ti-route" style="color:var(--amber)"></i>
+            <span class="panel-title">Traceroute</span>
+            <span class="badge badge-green" id="hop-count">--</span>
+          </div>
+          <div class="hop-list" id="hop-list" style="max-height:160px"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-hdr">
+            <i class="ti ti-gauge" style="color:var(--blue)"></i>
+            <span class="panel-title">Speed test</span>
+            <span class="badge badge-green" id="speed-badge">--</span>
+          </div>
+          <div class="speed-result" id="speed-result">
+            <div class="speed-row">
+              <div><div class="speed-label">DOWNLOAD</div><span class="speed-val" id="sp-dl" style="color:var(--accent)">--</span><span class="speed-unit"> Mbps</span></div>
+              <div><div class="speed-label">UPLOAD</div><span class="speed-val" id="sp-ul" style="color:var(--blue)">--</span><span class="speed-unit"> Mbps</span></div>
+              <div><div class="speed-label">PING</div><span class="speed-val" id="sp-ping" style="color:var(--amber)">--</span><span class="speed-unit"> ms</span></div>
+            </div>
+            <div class="speed-meta" id="sp-meta">No tests run yet</div>
+          </div>
+          <button class="btn primary" id="speed-btn" onclick="runSpeedtest()" style="margin-top:10px;width:100%;text-align:center">
+            <i class="ti ti-player-play"></i> Run speed test
+          </button>
+        </div>
+      </div>
+      <div class="grafana-bar">
+        <i class="ti ti-chart-bar" style="color:var(--purple)"></i>
+        <span style="font-weight:600">Grafana dashboards</span>
+        <span style="color:var(--muted);flex:1">Prometheus metrics on :9101 → Grafana on :3000</span>
+        <a href="/grafana/" target="_blank" class="btn">Open Grafana <i class="ti ti-external-link"></i></a>
+      </div>
+    </div>
+
+    <!-- MAP & GPS section -->
+    <div class="section" data-view="map" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-map-2" style="color:var(--accent)"></i>
+          <span class="panel-title">Route map — full view</span>
+          <span class="badge badge-amber" id="badspot-count2">-- bad spots</span>
+        </div>
+        <div id="map2" style="height:480px;border-radius:8px;z-index:1"></div>
+        <div class="gps-bar" style="margin-top:8px">
+          Lat <span class="gps-lat-sync">--</span>
+          Lon <span class="gps-lon-sync">--</span>
+          Speed <span class="gps-speed-sync">--</span>
+          Heading <span class="gps-hdg-sync">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LATENCY / JITTER section -->
+    <div class="section" data-view="latency" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Per-target stats</span>
+        </div>
+        <div id="target-breakdown"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-activity" style="color:var(--purple)"></i>
+          <span class="panel-title">Latency</span>
+        </div>
+        <div class="chart-wrap" style="height:250px"><canvas id="latChartFull"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Packet loss</span>
+        </div>
+        <div class="chart-wrap" style="height:180px"><canvas id="lossChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Jitter</span>
+        </div>
+        <div class="chart-wrap" style="height:180px"><canvas id="jitChartFull"></canvas></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:11px;color:var(--muted)">Poll interval:</span>
+        <select onchange="setPollInterval(this.value)">
+          <option value="3">3s</option><option value="5">5s</option>
+          <option value="10">10s</option><option value="30">30s</option>
+        </select>
+        <input type="text" id="new-target" placeholder="Add target IP" style="width:120px"/>
+        <button class="btn" onclick="addTarget()">+ Target</button>
+      </div>
+    </div>
+
+    <!-- TRACEROUTE section -->
+    <div class="section" data-view="traceroute" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-route" style="color:var(--amber)"></i>
+          <span class="panel-title">Traceroute</span>
+          <span class="badge badge-green" id="hop-count2">--</span>
+          <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="tr-target-display">→ 202.37.17.237</span>
+          <button class="btn" onclick="runTraceroute()">Run now</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Route path — latest run</div>
+        <div class="hop-chain" id="hop-chain"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-history" style="font-size:15px;color:var(--purple)"></i>
+          <span class="panel-title">Compare runs</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)">Period:</span>
+          <select id="tr-compare-hours" style="font-size:11px">
+            <option value="1">Last 1 hour</option>
+            <option value="3">Last 3 hours</option>
+            <option value="6">Last 6 hours</option>
+            <option value="12">Last 12 hours</option>
+            <option value="24" selected>Last 24 hours</option>
+          </select>
+          <button class="btn" onclick="loadTraceTimeline()">Load</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Click two bars to compare. Green = stable, amber = hop change, red = high latency.</div>
+        <div id="tr-timeline" style="display:flex;align-items:center;gap:3px;overflow-x:auto;padding:6px 0;min-height:36px"></div>
+        <div id="tr-diff" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- SPEED TEST section -->
+    <div class="section" data-view="speedtest" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-gauge" style="color:var(--blue)"></i>
+          <span class="panel-title">Speed test</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+          <div style="background:var(--bg3);border-radius:8px;padding:12px 14px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">Download</div>
+            <div style="font-size:24px;font-family:var(--mono);font-weight:600;color:var(--green)" id="st-dl">--</div>
+            <div style="font-size:11px;color:var(--muted)">Mbps</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:12px 14px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">Upload</div>
+            <div style="font-size:24px;font-family:var(--mono);font-weight:600;color:var(--blue)" id="st-ul">--</div>
+            <div style="font-size:11px;color:var(--muted)">Mbps</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:12px 14px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">Latency</div>
+            <div style="font-size:24px;font-family:var(--mono);font-weight:600;color:var(--amber)" id="st-ping">--</div>
+            <div style="font-size:11px;color:var(--muted)">ms</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:14px" id="st-meta">No tests run yet</div>
+        <button class="btn primary" id="st-run-btn" onclick="runSpeedtestFull()" style="width:100%;text-align:center;padding:10px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px">
+          <i class="ti ti-player-play" style="font-size:16px"></i> Run speed test
+        </button>
+        <div id="st-progress" style="display:none;margin-top:12px;background:var(--bg3);border-radius:8px;padding:14px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="st-phase-ping-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border)"></span>
+              <span style="font-size:12px;width:70px;color:var(--muted)">Ping</span>
+              <div style="flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div id="st-bar-ping" style="height:100%;width:0%;border-radius:3px;background:var(--green);transition:width .3s"></div></div>
+              <span style="font-size:11px;font-family:var(--mono);width:70px;text-align:right;color:var(--muted)" id="st-val-ping">waiting</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="st-phase-dl-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border)"></span>
+              <span style="font-size:12px;width:70px;color:var(--muted)">Download</span>
+              <div style="flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div id="st-bar-dl" style="height:100%;width:0%;border-radius:3px;background:var(--green);transition:width .3s"></div></div>
+              <span style="font-size:11px;font-family:var(--mono);width:70px;text-align:right;color:var(--muted)" id="st-val-dl">waiting</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="st-phase-ul-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border)"></span>
+              <span style="font-size:12px;width:70px;color:var(--muted)">Upload</span>
+              <div style="flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden"><div id="st-bar-ul" style="height:100%;width:0%;border-radius:3px;background:var(--blue);transition:width .3s"></div></div>
+              <span style="font-size:11px;font-family:var(--mono);width:70px;text-align:right;color:var(--muted)" id="st-val-ul">waiting</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr">
+          <span class="panel-title">Speed history</span>
+          <span style="flex:1"></span>
+          <span style="font-size:11px;color:var(--muted)">Last 10 tests</span>
+        </div>
+        <div class="chart-wrap" style="height:220px"><canvas id="speedChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- STARLINK section -->
+    <div class="section" data-view="starlink" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-satellite" style="color:var(--accent)"></i>
+          <span class="panel-title">Starlink dish status</span>
+          <span class="badge badge-green" id="sl-status">--</span>
+          <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="sl-hardware">--</span>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="slDishSpeedtest()" id="sl-speedtest-btn"><i class="ti ti-gauge" style="font-size:13px"></i> Dish speed test</button>
+          <button class="btn" onclick="slReboot()" style="border-color:var(--red);color:var(--red)"><i class="ti ti-refresh" style="font-size:13px"></i> Reboot dish</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+          <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Uptime</div>
+            <div style="font-size:18px;font-family:var(--mono);font-weight:600;color:var(--text)" id="sl-uptime">--</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">PoP Latency</div>
+            <div style="font-size:18px;font-family:var(--mono);font-weight:600;color:var(--green)" id="sl-pop-latency">--</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Ethernet</div>
+            <div style="font-size:18px;font-family:var(--mono);font-weight:600;color:var(--text)" id="sl-eth">--</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Service</div>
+            <div style="font-size:14px;font-family:var(--mono);font-weight:600;color:var(--accent)" id="sl-service">--</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">
+          <span>FW: <span style="color:var(--text)" id="sl-firmware">--</span></span>
+          <span>Boots: <span style="color:var(--text)" id="sl-boots">--</span></span>
+          <span>Mobility: <span style="color:var(--text)" id="sl-mobility">--</span></span>
+          <span>Country: <span style="color:var(--text)" id="sl-country">--</span></span>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-hdr">
+            <span class="panel-title">Throughput (dish)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px">DOWNLINK</div>
+              <div style="font-size:22px;font-family:var(--mono);font-weight:600;color:var(--green)" id="sl-dl">--</div>
+              <div style="font-size:10px;color:var(--muted)">Mbps</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px">UPLINK</div>
+              <div style="font-size:22px;font-family:var(--mono);font-weight:600;color:var(--blue)" id="sl-ul">--</div>
+              <div style="font-size:10px;color:var(--muted)">Mbps</div>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:150px"><canvas id="slThroughputChart"></canvas></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hdr">
+            <span class="panel-title">Signal & alignment</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span style="font-size:12px;color:var(--muted)">Azimuth</span>
+              <span style="font-size:12px;font-family:var(--mono);color:var(--text)" id="sl-azimuth">--°</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span style="font-size:12px;color:var(--muted)">Elevation</span>
+              <span style="font-size:12px;font-family:var(--mono);color:var(--text)" id="sl-elevation">--°</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span style="font-size:12px;color:var(--muted)">Tilt</span>
+              <span style="font-size:12px;font-family:var(--mono);color:var(--text)" id="sl-tilt">--°</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span style="font-size:12px;color:var(--muted)">SNR</span>
+              <span style="font-size:12px;font-family:var(--mono)" id="sl-snr">--</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span style="font-size:12px;color:var(--muted)">GPS sats</span>
+              <span style="font-size:12px;font-family:var(--mono);color:var(--text)" id="sl-gps-sats">--</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span style="font-size:12px;color:var(--muted)">GPS lock</span>
+              <span style="font-size:12px;font-family:var(--mono)" id="sl-gps-lock">--</span>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Ready states</div>
+            <div id="sl-ready" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-hdr">
+            <span class="panel-title">Obstruction</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px">OBSTRUCTED</div>
+              <div style="font-size:22px;font-family:var(--mono);font-weight:600" id="sl-obstruction">--%</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px">AVG DURATION</div>
+              <div style="font-size:22px;font-family:var(--mono);font-weight:600;color:var(--text)" id="sl-obst-dur">--s</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">
+            <span>Interval: <span style="color:var(--text)" id="sl-obst-interval">--</span></span>
+            <span>Valid: <span style="color:var(--text)" id="sl-obst-valid">--</span></span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hdr">
+            <span class="panel-title">Alerts & updates</span>
+          </div>
+          <div id="sl-alerts" style="font-size:12px;margin-bottom:10px">No alerts</div>
+          <div style="border-top:1px solid var(--border);padding-top:10px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Software update</div>
+            <div style="display:flex;gap:12px;font-size:12px">
+              <span>State: <span style="color:var(--text);font-family:var(--mono)" id="sl-sw-state">--</span></span>
+              <span>Progress: <span style="color:var(--text);font-family:var(--mono)" id="sl-sw-progress">--</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="sl-speedtest-panel" style="display:none">
+        <div class="panel-hdr">
+          <i class="ti ti-gauge" style="color:var(--accent)"></i>
+          <span class="panel-title">Dish speed test results</span>
+        </div>
+        <div id="sl-speedtest-results" style="font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--text)">Running...</div>
+      </div>
+    </div>
+
+    <!-- BAD SPOTS section -->
+    <div class="section" data-view="badspots" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-map-pin" style="color:var(--red)"></i>
+          <span class="panel-title">Bad spots — last 24 hours</span>
+          <button class="btn" onclick="loadBadSpots()">Refresh</button>
+        </div>
+        <div id="badspot-list" style="font-size:12px;font-family:var(--mono)"></div>
+        <div id="badspot-empty" style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No bad spots recorded yet. Bad spots are logged when latency, jitter, or packet loss exceed thresholds while GPS has a fix.</div>
+      </div>
+    </div>
+
+    <!-- HISTORY section -->
+    <div class="section" data-view="history" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-history" style="color:var(--purple)"></i>
+          <span class="panel-title">Traceroute history — last 24 hours</span>
+          <button class="btn" onclick="loadTraceHistory()">Load & compare</button>
+        </div>
+        <div id="trace-history-list" style="font-size:12px;font-family:var(--mono)"></div>
+        <div id="trace-history-empty" style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">Traceroute runs are stored every 5 minutes. Select two runs to compare hop changes over time.</div>
+      </div>
+    </div>
+
+    <!-- SETTINGS section -->
+    <div class="section" data-view="settings" style="display:none">
+      <div class="panel">
+        <div class="panel-hdr">
+          <i class="ti ti-settings" style="color:var(--muted)"></i>
+          <span class="panel-title">Configuration</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">PING TARGETS</div>
+            <div id="settings-targets" style="font-family:var(--mono);font-size:12px"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <input type="text" id="settings-new-target" placeholder="IP address" style="flex:1"/>
+              <button class="btn" onclick="addTarget();loadSettings()">Add</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">THRESHOLDS</div>
+            <div style="font-size:12px;line-height:2">
+              <div>Latency: <span id="thr-lat">80</span> ms</div>
+              <div>Jitter: <span id="thr-jit">25</span> ms</div>
+              <div>Packet loss: <span id="thr-loss">2.0</span>%</div>
+              <div>Sustained: <span id="thr-dur">10</span>s</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">GPS SOURCE</div>
+          <div style="font-size:12px;color:var(--text)" id="settings-gps">--</div>
+        </div>
+        <div style="margin-top:14px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">TRACEROUTE TARGET</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--text)" id="settings-tr">--</div>
+        </div>
+        <div style="margin-top:14px;color:var(--muted);font-size:11px">Edit /opt/nettrace/config/nettrace.yaml for full configuration. Restart service after changes.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="/static/vendor/leaflet.min.js"></script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+// =========================================================================
+// Map
+// =========================================================================
+const map = L.map('map').setView([-36.8485, 174.7633], 8);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OSM', maxZoom: 18
+}).addTo(map);
+
+const vehicleIcon = L.divIcon({
+  html: '<div style="width:14px;height:14px;background:var(--green);border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(26,255,140,.6)"></div>',
+  iconSize: [14,14], iconAnchor: [7,7], className: ''
+});
+const vehicleMarker = L.marker([-36.8485, 174.7633], {icon: vehicleIcon}).addTo(map);
+const routeLine = L.polyline([], {color: '#1aff8c', weight: 3, opacity: 0.7}).addTo(map);
+const badSpotLayer = L.layerGroup().addTo(map);
+const trackPoints = [];
+
+// =========================================================================
+// Charts — multi-target
+// =========================================================================
+const chartOpts = (yLabel) => ({
+  responsive: true, maintainAspectRatio: false,
+  scales: {
+    x: { display: true, ticks: { color: '#6b7280', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: '#2a3040' } },
+    y: { display: true, ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#2a3040' }, beginAtZero: true,
+      title: { display: true, text: yLabel, color: '#6b7280', font: { size: 10 } } }
+  },
+  plugins: { legend: { labels: { color: '#6b7280', font: { size: 10 } } } },
+  animation: { duration: 300 }
+});
+
+const targetColors = {
+  '1.1.1.1':  { border: '#1aff8c', bg: 'rgba(26,255,140,.1)' },
+  '8.8.8.8':  { border: '#3b8bd4', bg: 'rgba(59,139,212,.1)' },
+  '9.9.9.9':  { border: '#7f77dd', bg: 'rgba(127,119,221,.1)' },
+  '_default': { border: '#ffb020', bg: 'rgba(255,176,32,.1)' },
+};
+function getColor(host) { return targetColors[host] || targetColors['_default']; }
+
+const latChart = new Chart(document.getElementById('latChart').getContext('2d'), {
+  type: 'line', data: { labels: [], datasets: [] }, options: chartOpts('ms')
+});
+const lossChartOverview = new Chart(document.getElementById('lossChartOverview').getContext('2d'), {
+  type: 'line', data: { labels: [], datasets: [] }, options: chartOpts('%')
+});
+const knownTargets = new Set();
+const knownLossTargets = new Set();
+const jitterData = {};
+const jitterLabels = [];
+
+const speedChart = new Chart(document.getElementById('speedChart').getContext('2d'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Download', data: [], borderColor: '#1aff8c', backgroundColor: 'rgba(26,255,140,.08)', fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#1aff8c', borderWidth: 2 },
+    { label: 'Upload', data: [], borderColor: '#3b8bd4', backgroundColor: 'rgba(59,139,212,.08)', fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#3b8bd4', borderWidth: 2 }
+  ]},
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { color: '#2a3040' } },
+      y: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { color: '#2a3040' }, beginAtZero: true,
+        title: { display: true, text: 'Mbps', color: '#6b7280', font: { size: 10 } } }
+    },
+    plugins: { legend: { labels: { color: '#6b7280', font: { size: 10 } } } }
+  }
+});
+
+// =========================================================================
+// State
+// =========================================================================
+let pollTimer = null;
+let currentTarget = '1.1.1.1';
+const MAX_CHART_POINTS = 120;
+
+function classify(val, warn, bad) {
+  if (val >= bad) return 'bad';
+  if (val >= warn) return 'warn';
+  return 'good';
+}
+
+// =========================================================================
+// Poll API
+// =========================================================================
+async function poll() {
+  try {
+    const resp = await fetch('/api/state');
+    const d = await resp.json();
+
+    // KPIs — show first target
+    const firstTarget = Object.keys(d.ping)[0];
+    if (firstTarget && d.ping[firstTarget]) {
+      const p = d.ping[firstTarget];
+      document.getElementById('kpi-lat').textContent = p.latency + ' ms';
+      document.getElementById('kpi-lat').className = 'kpi-val ' + classify(p.latency, 50, 100);
+      document.getElementById('kpi-lat-sub').textContent = p.label + ' · avg';
+      document.getElementById('kpi-jit').textContent = p.jitter + ' ms';
+      document.getElementById('kpi-jit').className = 'kpi-val ' + classify(p.jitter, 15, 30);
+      document.getElementById('kpi-loss').textContent = p.loss + '%';
+      document.getElementById('kpi-loss').className = 'kpi-val ' + classify(p.loss, 1, 5);
+    }
+
+    // Update charts — all targets
+    const now = new Date().toLocaleTimeString('en-NZ', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const targets = Object.keys(d.ping);
+    targets.forEach(host => {
+      const p = d.ping[host];
+      if (!knownTargets.has(host)) {
+        knownTargets.add(host);
+        const c = getColor(host);
+        latChart.data.datasets.push({
+          label: p.label || host, data: [], borderColor: c.border,
+          backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5
+        });
+      }
+      if (!knownLossTargets.has(host)) {
+        knownLossTargets.add(host);
+        const c = getColor(host);
+        lossChartOverview.data.datasets.push({
+          label: p.label || host, data: [], borderColor: c.border,
+          backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5
+        });
+      }
+      const idx = [...knownTargets].indexOf(host);
+      latChart.data.datasets[idx].data.push(p.latency);
+      const lidx = [...knownLossTargets].indexOf(host);
+      lossChartOverview.data.datasets[lidx].data.push(p.loss);
+      // Store jitter for the full section charts
+      if (!jitterData[host]) jitterData[host] = [];
+      jitterData[host].push(p.jitter);
+      if (jitterData[host].length > MAX_CHART_POINTS) jitterData[host].shift();
+    });
+    latChart.data.labels.push(now);
+    lossChartOverview.data.labels.push(now);
+    jitterLabels.push(now);
+    if (latChart.data.labels.length > MAX_CHART_POINTS) {
+      latChart.data.labels.shift();
+      lossChartOverview.data.labels.shift();
+      jitterLabels.shift();
+      latChart.data.datasets.forEach(ds => ds.data.shift());
+      lossChartOverview.data.datasets.forEach(ds => ds.data.shift());
+    }
+    latChart.update('none');
+    lossChartOverview.update('none');
+
+    // Save state for breakdown and sync full charts
+    lastPingState = d.ping;
+    syncFullCharts();
+
+    // GPS
+    if (d.gps) {
+      const g = d.gps;
+      document.getElementById('gps-lat').textContent = g.lat.toFixed(4);
+      document.getElementById('gps-lon').textContent = g.lon.toFixed(4);
+      document.getElementById('gps-speed').textContent = Math.round(g.speed) + ' km/h';
+      document.getElementById('gps-hdg').textContent = Math.round(g.heading) + '°';
+      document.getElementById('kpi-pos').textContent = g.lat.toFixed(4) + ', ' + g.lon.toFixed(4);
+      document.getElementById('kpi-pos-sub').textContent = Math.round(g.speed) + ' km/h · ' + (g.lock ? 'GPS lock' : 'No lock');
+
+      const gpsDot = document.getElementById('gps-dot');
+      gpsDot.className = 'dot' + (g.lock ? '' : ' amber');
+      document.getElementById('gps-label').textContent = g.lock ? 'GPS lock' : 'No fix';
+
+      if (g.lat !== 0 && g.lon !== 0) {
+        vehicleMarker.setLatLng([g.lat, g.lon]);
+        trackPoints.push([g.lat, g.lon]);
+        routeLine.setLatLngs(trackPoints);
+      }
+    }
+
+    // Traceroute
+    if (d.traceroute && d.traceroute.hops) {
+      renderHops(d.traceroute.hops);
+    }
+
+    // Speedtest
+    if (d.speedtest && d.speedtest.timestamp) {
+      renderSpeed(d.speedtest);
+    }
+
+    // Starlink telemetry
+    if (d.starlink) {
+      renderStarlink(d.starlink);
+    }
+
+    // Interface
+    document.getElementById('iface-badges').innerHTML = `<span class="iface active">${d.interface || 'unknown'}</span>`;
+
+    // Bad spot indicator
+    const liveDot = document.getElementById('live-dot');
+    const liveLabel = document.getElementById('live-label');
+    if (d.bad_spot) {
+      liveDot.className = 'dot red';
+      liveLabel.textContent = 'BAD SPOT';
+    } else {
+      liveDot.className = 'dot';
+      liveLabel.textContent = 'LIVE · 3s';
+    }
+
+  } catch (e) {
+    console.warn('Poll error:', e);
+    document.getElementById('live-dot').className = 'dot red';
+    document.getElementById('live-label').textContent = 'Disconnected';
+  }
+}
+
+// =========================================================================
+// Traceroute rendering
+// =========================================================================
+function renderHops(hops) {
+  document.getElementById('hop-count').textContent = hops.length + ' hops';
+  const hc2 = document.getElementById('hop-count2');
+  if (hc2) hc2.textContent = hops.length + ' hops';
+  const maxRtt = Math.max(...hops.map(h => h.avg), 1);
+
+  // Detail table
+  const html = hops.map(h => {
+    const pct = Math.min(100, (h.avg / maxRtt) * 100);
+    const cls = h.ip === '???' ? 'warn' : classify(h.avg, 50, 100);
+    if (h.loss > 10 && h.ip !== '???') var cls2 = 'warn';
+    const color = cls === 'good' ? 'var(--green)' : cls === 'warn' ? 'var(--amber)' : 'var(--red)';
+    return `<div class="hop">
+      <span class="hop-n">${h.hop}</span>
+      <span class="hop-bar"><span class="hop-fill" style="width:${pct}%;background:${color}"></span></span>
+      <span class="hop-ip">${h.ip}</span>
+      <span class="hop-ms" style="color:${color}">${h.avg}ms</span>
+      <span style="width:40px;text-align:right;font-size:11px;color:${h.loss > 0 ? 'var(--red)' : 'var(--muted)'}">${h.loss > 0 ? h.loss+'%' : ''}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('hop-list').innerHTML = html;
+
+  // Visual hop chain
+  const chain = document.getElementById('hop-chain');
+  if (chain) {
+    chain.innerHTML = hops.map((h, i) => {
+      const cls = h.ip === '???' ? 'hc-unknown' : (h.loss > 10 ? 'hc-warn' : classify(h.avg, 50, 100) === 'good' ? 'hc-good' : classify(h.avg, 50, 100) === 'warn' ? 'hc-warn' : 'hc-bad');
+      const rttColor = cls === 'hc-good' ? 'var(--green)' : cls === 'hc-warn' ? 'var(--amber)' : cls === 'hc-bad' ? 'var(--red)' : 'var(--muted)';
+      const connector = i < hops.length - 1 ? '<div class="hop-connector"><div class="hop-line"></div></div>' : '';
+      return `<div class="hop-node">
+        <div class="hop-circle ${cls}">${h.hop}</div>
+        <div class="hop-detail">
+          <div class="hop-detail-ip">${h.ip}</div>
+          <div class="hop-detail-rtt" style="color:${rttColor}">${h.avg}ms</div>
+          ${h.loss > 0 ? `<div class="hop-detail-loss">${h.loss}% loss</div>` : ''}
+        </div>
+      </div>${connector}`;
+    }).join('');
+  }
+}
+
+// =========================================================================
+// Speed test
+// =========================================================================
+function renderSpeed(s) {
+  document.getElementById('sp-dl').textContent = s.download;
+  document.getElementById('sp-ul').textContent = s.upload;
+  document.getElementById('sp-ping').textContent = s.ping;
+  document.getElementById('sp-meta').textContent = `via speedtest-cli · ${s.server || ''} · ${s.timestamp ? new Date(s.timestamp).toLocaleTimeString() : ''}`;
+  document.getElementById('speed-badge').textContent = `Last: ${s.timestamp ? new Date(s.timestamp).toLocaleTimeString() : '--'}`;
+  // Sync to speed test tab
+  const stDl = document.getElementById('st-dl'); if (stDl) stDl.textContent = s.download;
+  const stUl = document.getElementById('st-ul'); if (stUl) stUl.textContent = s.upload;
+  const stPing = document.getElementById('st-ping'); if (stPing) stPing.textContent = s.ping;
+  const stMeta = document.getElementById('st-meta');
+  if (stMeta) stMeta.textContent = `via speedtest-cli · ${s.server || ''} · ${s.timestamp ? new Date(s.timestamp).toLocaleTimeString() : ''}`;
+  document.querySelectorAll('.sp-dl-sync').forEach(e => e.textContent = s.download);
+  document.querySelectorAll('.sp-ul-sync').forEach(e => e.textContent = s.upload);
+  document.querySelectorAll('.sp-ping-sync').forEach(e => e.textContent = s.ping);
+}
+
+let speedtestRunning = false;
+async function runSpeedtestFull() {
+  if (speedtestRunning) return;
+  speedtestRunning = true;
+  const btn = document.getElementById('st-run-btn');
+  const prog = document.getElementById('st-progress');
+  const startTs = Date.now();
+
+  btn.innerHTML = '<span class="st-spinner"></span> Speed test running...';
+  btn.style.background = 'rgba(255,176,32,.12)';
+  btn.style.borderColor = 'var(--amber)';
+  btn.style.color = 'var(--amber)';
+  btn.style.cursor = 'wait';
+  prog.style.display = 'block';
+
+  // Reset phases
+  ['ping','dl','ul'].forEach(p => {
+    document.getElementById('st-phase-'+p+'-dot').style.background = 'var(--border)';
+    document.getElementById('st-bar-'+p).style.width = '0%';
+    document.getElementById('st-val-'+p).textContent = 'waiting';
+    document.getElementById('st-val-'+p).style.color = 'var(--muted)';
+  });
+
+  // Simulate phases while waiting for result
+  document.getElementById('st-phase-ping-dot').style.background = 'var(--amber)';
+  document.getElementById('st-phase-ping-dot').classList.add('st-dot-active');
+  document.getElementById('st-val-ping').textContent = 'testing...';
+  document.getElementById('st-val-ping').style.color = 'var(--amber)';
+
+  try {
+    await fetch('/api/speedtest', { method: 'POST' });
+    // Phase simulation
+    setTimeout(() => {
+      document.getElementById('st-bar-ping').style.width = '100%';
+      document.getElementById('st-phase-ping-dot').style.background = 'var(--green)';
+      document.getElementById('st-phase-ping-dot').classList.remove('st-dot-active');
+      document.getElementById('st-val-ping').style.color = 'var(--green)';
+      document.getElementById('st-phase-dl-dot').style.background = 'var(--amber)';
+      document.getElementById('st-phase-dl-dot').classList.add('st-dot-active');
+      document.getElementById('st-val-dl').textContent = 'testing...';
+      document.getElementById('st-val-dl').style.color = 'var(--amber)';
+    }, 3000);
+    let dlProg = 0;
+    const dlTimer = setInterval(() => { dlProg = Math.min(90, dlProg + 5); document.getElementById('st-bar-dl').style.width = dlProg+'%'; }, 1000);
+
+    let attempts = 0;
+    const checker = setInterval(async () => {
+      attempts++;
+      const elapsed = Date.now() - startTs;
+      if (elapsed > 20000 && document.getElementById('st-phase-ul-dot').style.background !== 'var(--amber)') {
+        clearInterval(dlTimer);
+        document.getElementById('st-bar-dl').style.width = '100%';
+        document.getElementById('st-phase-dl-dot').style.background = 'var(--green)';
+        document.getElementById('st-phase-dl-dot').classList.remove('st-dot-active');
+        document.getElementById('st-val-dl').style.color = 'var(--green)';
+        document.getElementById('st-phase-ul-dot').style.background = 'var(--amber)';
+        document.getElementById('st-phase-ul-dot').classList.add('st-dot-active');
+        document.getElementById('st-val-ul').textContent = 'testing...';
+        document.getElementById('st-val-ul').style.color = 'var(--amber)';
+      }
+      const resp = await fetch('/api/state');
+      const d = await resp.json();
+      if (d.speedtest && d.speedtest.timestamp && new Date(d.speedtest.timestamp).getTime() > startTs) {
+        clearInterval(checker);
+        clearInterval(dlTimer);
+        renderSpeed(d.speedtest);
+        document.getElementById('st-val-ping').textContent = d.speedtest.ping + 'ms';
+        document.getElementById('st-val-dl').textContent = d.speedtest.download + ' Mbps';
+        document.getElementById('st-val-ul').textContent = d.speedtest.upload + ' Mbps';
+        ['ping','dl','ul'].forEach(p => {
+          document.getElementById('st-bar-'+p).style.width = '100%';
+          document.getElementById('st-phase-'+p+'-dot').style.background = 'var(--green)';
+          document.getElementById('st-phase-'+p+'-dot').classList.remove('st-dot-active');
+          document.getElementById('st-val-'+p).style.color = 'var(--green)';
+        });
+        document.getElementById('st-bar-ul').style.background = 'var(--blue)';
+        resetSpeedBtn();
+        loadSpeedHistory();
+      }
+      if (attempts > 60) { clearInterval(checker); clearInterval(dlTimer); resetSpeedBtn(); }
+    }, 3000);
+  } catch (e) { resetSpeedBtn(); }
+}
+
+function resetSpeedBtn() {
+  speedtestRunning = false;
+  const btn = document.getElementById('st-run-btn');
+  btn.innerHTML = '<i class="ti ti-player-play" style="font-size:16px"></i> Run speed test';
+  btn.style.background = 'var(--accent-bg)';
+  btn.style.borderColor = 'var(--accent)';
+  btn.style.color = 'var(--accent)';
+  btn.style.cursor = 'pointer';
+}
+
+// Keep old runSpeedtest for overview button
+async function runSpeedtest() { runSpeedtestFull(); }
+
+async function loadSpeedHistory() {
+  try {
+    const resp = await fetch('/api/speedtest/history?limit=10');
+    const data = await resp.json();
+    speedChart.data.labels = data.reverse().map(r => new Date(r.timestamp).toLocaleTimeString('en-NZ', {hour:'2-digit',minute:'2-digit'}));
+    speedChart.data.datasets[0].data = data.map(r => r.download_mbps);
+    speedChart.data.datasets[1].data = data.map(r => r.upload_mbps);
+    speedChart.update();
+  } catch (e) { console.warn('Speed history load failed', e); }
+}
+
+// =========================================================================
+// Traceroute controls + timeline comparison
+// =========================================================================
+async function runTraceroute() {
+  try { await fetch('/api/traceroute/run', { method: 'POST' }); } catch (e) {}
+}
+
+let trTimelineData = [];
+let trSelected = [];
+
+async function loadTraceTimeline() {
+  const hours = document.getElementById('tr-compare-hours').value;
+  try {
+    const resp = await fetch('/api/traceroute/history?hours=' + hours);
+    trTimelineData = await resp.json();
+    trSelected = [];
+    renderTraceTimeline();
+  } catch (e) {}
+}
+
+function renderTraceTimeline() {
+  const container = document.getElementById('tr-timeline');
+  if (!container || trTimelineData.length === 0) {
+    if (container) container.innerHTML = '<span style="font-size:11px;color:var(--muted)">No runs found. Click "Load" to fetch history.</span>';
+    return;
+  }
+
+  // Build time label positions
+  const times = trTimelineData.map(r => new Date(r.timestamp));
+
+  let html = '<div style="display:flex;flex-direction:column;width:100%">';
+  html += '<div style="display:flex;align-items:flex-end;gap:3px;padding-bottom:4px">';
+  trTimelineData.forEach((run, i) => {
+    const hops = JSON.parse(run.hops_json);
+    const maxRtt = Math.max(...hops.map(h => h.avg));
+    const hasUnknown = hops.some(h => h.ip === '???');
+    const cls = maxRtt > 100 ? 'tr-tick-bad' : (hasUnknown || maxRtt > 50) ? 'tr-tick-warn' : 'tr-tick-good';
+    const sel = trSelected.includes(i) ? ' selected' : '';
+    html += `<div class="tr-tick ${cls}${sel}" onclick="selectTraceRun(${i})"></div>`;
+  });
+  html += '</div>';
+
+  // Time labels row — every 6 hours, date at midnight
+  html += '<div style="display:flex;gap:3px;position:relative;height:18px">';
+  let lastLabelHour = -1;
+  trTimelineData.forEach((run, i) => {
+    const d = new Date(run.timestamp);
+    const h = d.getHours();
+    const nearestBlock = Math.floor(h / 6) * 6;
+    const showLabel = (i === 0) || (nearestBlock !== lastLabelHour && Math.abs(h - nearestBlock) < 1) || (i === trTimelineData.length - 1);
+    if (showLabel) {
+      lastLabelHour = nearestBlock;
+      let labelText;
+      if (h === 0 || (i === 0 && h < 3)) {
+        labelText = d.toLocaleDateString('en-NZ', {day:'numeric',month:'short'});
+      } else {
+        labelText = h + ':00';
+      }
+      html += `<div style="width:6px;flex-shrink:0;text-align:center;position:relative"><span style="font-size:9px;font-family:var(--mono);color:var(--muted);position:absolute;top:2px;left:50%;transform:translateX(-50%);white-space:nowrap">${labelText}</span></div>`;
+    } else {
+      html += '<div style="width:6px;flex-shrink:0"></div>';
+    }
+  });
+  html += '</div></div>';
+
+  container.innerHTML = html;
+}
+
+function selectTraceRun(idx) {
+  if (trSelected.includes(idx)) {
+    trSelected = trSelected.filter(i => i !== idx);
+  } else {
+    if (trSelected.length >= 2) trSelected.shift();
+    trSelected.push(idx);
+  }
+  renderTraceTimeline();
+  if (trSelected.length === 2) renderTraceDiff();
+  else document.getElementById('tr-diff').innerHTML = '';
+}
+
+function renderTraceDiff() {
+  const runA = trTimelineData[trSelected[0]];
+  const runB = trTimelineData[trSelected[1]];
+  const hopsA = JSON.parse(runA.hops_json);
+  const hopsB = JSON.parse(runB.hops_json);
+  const timeA = new Date(runA.timestamp).toLocaleTimeString('en-NZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const timeB = new Date(runB.timestamp).toLocaleTimeString('en-NZ', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const maxHops = Math.max(hopsA.length, hopsB.length);
+
+  let rowsA = '', rowsB = '';
+  for (let i = 0; i < maxHops; i++) {
+    const a = hopsA[i] || null;
+    const b = hopsB[i] || null;
+    let clsA = '', clsB = '', deltaText = '';
+    if (a && b && a.ip !== b.ip) { clsA = 'tr-changed'; clsB = 'tr-changed'; deltaText = 'changed'; }
+    else if (a && b) { deltaText = (b.avg - a.avg) >= 0 ? '+' + (b.avg - a.avg).toFixed(1) : (b.avg - a.avg).toFixed(1); }
+    else if (!a && b) { clsB = 'tr-added'; deltaText = 'new'; }
+    else if (a && !b) { clsA = 'tr-removed'; deltaText = 'gone'; }
+
+    rowsA += `<div class="tr-diff-row ${clsA}">
+      <span style="width:20px;color:var(--muted)">${i+1}</span>
+      <span style="flex:1">${a ? a.ip : '--'}</span>
+      <span style="width:50px;text-align:right">${a ? a.avg+'ms' : '--'}</span>
+    </div>`;
+    rowsB += `<div class="tr-diff-row ${clsB}">
+      <span style="width:20px;color:var(--muted)">${i+1}</span>
+      <span style="flex:1">${b ? b.ip : '--'}</span>
+      <span style="width:50px;text-align:right">${b ? b.avg+'ms' : '--'}</span>
+      <span style="width:50px;text-align:right;font-size:10px;color:${deltaText==='changed'?'var(--amber)':deltaText==='new'?'var(--green)':deltaText==='gone'?'var(--red)':'var(--muted)'}">${deltaText}</span>
+    </div>`;
+  }
+
+  document.getElementById('tr-diff').innerHTML = `<div class="tr-diff-grid">
+    <div class="tr-diff-col">
+      <div class="tr-diff-hdr"><span>Run A — ${timeA}</span><span style="color:var(--muted)">${hopsA.length} hops</span></div>
+      ${rowsA}
+    </div>
+    <div class="tr-diff-col">
+      <div class="tr-diff-hdr"><span>Run B — ${timeB}</span><span style="color:var(--muted)">${hopsB.length} hops</span></div>
+      ${rowsB}
+    </div>
+  </div>`;
+}
+
+async function loadTraceHistory() { loadTraceTimeline(); }
+
+// =========================================================================
+// Bad spots on map
+// =========================================================================
+async function loadBadSpots() {
+  try {
+    const resp = await fetch('/api/badspots?hours=24');
+    const spots = await resp.json();
+    badSpotLayer.clearLayers();
+    document.getElementById('badspot-count').textContent = spots.length + ' bad spots';
+    spots.forEach(s => {
+      if (s.lat && s.lon) {
+        const color = s.avg_latency_ms > 100 ? '#ff4d4d' : '#ffb020';
+        L.circleMarker([s.lat, s.lon], {
+          radius: 6, color: color, fillColor: color, fillOpacity: 0.7, weight: 1
+        }).bindPopup(
+          `<b>Bad spot</b><br>Latency: ${s.avg_latency_ms}ms<br>Loss: ${s.avg_loss_pct}%<br>Jitter: ${s.avg_jitter_ms}ms<br>Duration: ${s.duration_sec}s<br>Interface: ${s.interface}`
+        ).addTo(badSpotLayer);
+      }
+    });
+  } catch (e) {}
+}
+
+// =========================================================================
+// Target management
+// =========================================================================
+async function addTarget() {
+  const input = document.getElementById('new-target');
+  const host = input.value.trim();
+  if (!host) return;
+  try {
+    await fetch('/api/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host: host, label: host })
+    });
+    input.value = '';
+  } catch (e) {}
+}
+
+function switchLatTarget(host) { currentTarget = host; }
+
+function setPollInterval(sec) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(poll, sec * 1000);
+}
+
+// =========================================================================
+// Per-target breakdown + full chart sync
+// =========================================================================
+let lastPingState = {};
+
+function updateBreakdown() {
+  const el = document.getElementById('target-breakdown');
+  if (!el) return;
+  const targets = Object.keys(lastPingState);
+  if (targets.length === 0) { el.innerHTML = '<div style="color:var(--muted);padding:10px">Waiting for data...</div>'; return; }
+  el.innerHTML = targets.map(host => {
+    const p = lastPingState[host];
+    const c = getColor(host);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="width:10px;height:10px;border-radius:50%;background:${c.border}"></div>
+      <div style="flex:1;font-size:13px;font-weight:600">${p.label || host}</div>
+      <div style="font-family:var(--mono);font-size:12px;width:70px">Lat: <span style="color:${classify(p.latency,50,100)==='good'?'var(--green)':classify(p.latency,50,100)==='warn'?'var(--amber)':'var(--red)'}">${p.latency}ms</span></div>
+      <div style="font-family:var(--mono);font-size:12px;width:70px">Jit: <span style="color:${classify(p.jitter,15,30)==='good'?'var(--green)':classify(p.jitter,15,30)==='warn'?'var(--amber)':'var(--red)'}">${p.jitter}ms</span></div>
+      <div style="font-family:var(--mono);font-size:12px;width:70px">Loss: <span style="color:${classify(p.loss,1,5)==='good'?'var(--green)':classify(p.loss,1,5)==='warn'?'var(--amber)':'var(--red)'}">${p.loss}%</span></div>
+    </div>`;
+  }).join('');
+}
+
+function syncFullCharts() {
+  if (!latChartFull) return;
+  const activeSection = document.querySelector('.section[data-view="latency"]');
+  if (activeSection && activeSection.style.display !== 'none') {
+    // Sync latency
+    latChartFull.data = JSON.parse(JSON.stringify(latChart.data));
+    latChartFull.update('none');
+
+    // Build jitter chart from stored data
+    const jitDatasets = [];
+    Object.keys(jitterData).forEach(host => {
+      const p = lastPingState[host] || {};
+      const c = getColor(host);
+      jitDatasets.push({
+        label: p.label || host, data: [...jitterData[host]], borderColor: c.border,
+        backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5
+      });
+    });
+    jitChartFull.data = { labels: [...jitterLabels], datasets: jitDatasets };
+    jitChartFull.update('none');
+
+    // Update loss chart
+    const now = latChart.data.labels[latChart.data.labels.length - 1];
+    if (now && lossChart) {
+      const targets = Object.keys(lastPingState);
+      targets.forEach(host => {
+        const p = lastPingState[host];
+        const c = getColor(host);
+        let ds = lossChart.data.datasets.find(d => d.label === (p.label || host));
+        if (!ds) {
+          ds = { label: p.label || host, data: [], borderColor: c.border, backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5 };
+          lossChart.data.datasets.push(ds);
+        }
+        ds.data.push(p.loss);
+      });
+      lossChart.data.labels.push(now);
+      if (lossChart.data.labels.length > MAX_CHART_POINTS) {
+        lossChart.data.labels.shift();
+        lossChart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      lossChart.update('none');
+    }
+    updateBreakdown();
+  }
+}
+
+// =========================================================================
+// Nav — section switching
+// =========================================================================
+let map2 = null, latChartFull = null, jitChartFull = null, lossChart = null;
+
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+  const target = document.querySelector(`.section[data-view="${name}"]`);
+  if (target) target.style.display = 'flex';
+
+  // Initialise section-specific elements on first show
+  if (name === 'map' && !map2) {
+    map2 = L.map('map2').setView([-36.8485, 174.7633], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OSM', maxZoom: 18
+    }).addTo(map2);
+    setTimeout(() => map2.invalidateSize(), 100);
+  }
+  if (name === 'map' && map2) setTimeout(() => map2.invalidateSize(), 100);
+
+  if (name === 'latency') {
+    if (!latChartFull) {
+      latChartFull = new Chart(document.getElementById('latChartFull').getContext('2d'), {
+        type: 'line', data: { labels: [], datasets: [] }, options: chartOpts('ms')
+      });
+      jitChartFull = new Chart(document.getElementById('jitChartFull').getContext('2d'), {
+        type: 'line', data: { labels: [], datasets: [] }, options: chartOpts('ms')
+      });
+      lossChart = new Chart(document.getElementById('lossChart').getContext('2d'), {
+        type: 'line', data: { labels: [], datasets: [] }, options: chartOpts('%')
+      });
+    }
+    // Sync data from the overview charts
+    latChartFull.data = JSON.parse(JSON.stringify(latChart.data));
+    // Build jitter from stored data
+    const jds = [];
+    Object.keys(jitterData).forEach(host => {
+      const p = lastPingState[host] || {};
+      const c = getColor(host);
+      jds.push({ label: p.label || host, data: [...jitterData[host]], borderColor: c.border, backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5 });
+    });
+    jitChartFull.data = { labels: [...jitterLabels], datasets: jds };
+    latChartFull.update('none');
+    jitChartFull.update('none');
+    updateBreakdown();
+  }
+
+  if (name === 'badspots') loadBadSpotsList();
+  if (name === 'history') loadTraceHistoryList();
+  if (name === 'settings') loadSettings();
+  if (name === 'starlink' && !slThroughputChart) {
+    slThroughputChart = new Chart(document.getElementById('slThroughputChart').getContext('2d'), {
+      type: 'line',
+      data: { labels: slLabels, datasets: [
+        { label: 'Downlink', data: slDlHistory, borderColor: '#1aff8c', backgroundColor: 'rgba(26,255,140,.08)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5 },
+        { label: 'Uplink', data: slUlHistory, borderColor: '#3b8bd4', backgroundColor: 'rgba(59,139,212,.08)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5 }
+      ]},
+      options: chartOpts('Mbps')
+    });
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    showSection(item.dataset.section);
+  });
+});
+
+// =========================================================================
+// Bad spots list
+// =========================================================================
+async function loadBadSpotsList() {
+  try {
+    const resp = await fetch('/api/badspots?hours=24');
+    const spots = await resp.json();
+    const list = document.getElementById('badspot-list');
+    const empty = document.getElementById('badspot-empty');
+    if (spots.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    list.innerHTML = spots.map(s =>
+      `<div class="hop">
+        <span style="color:var(--red);width:14px">&#9679;</span>
+        <span class="hop-ip">${s.lat ? s.lat.toFixed(4)+', '+s.lon.toFixed(4) : 'No GPS'}</span>
+        <span style="flex:1;color:var(--muted)">${new Date(s.start_time).toLocaleString()}</span>
+        <span style="width:70px">Lat: ${s.avg_latency_ms}ms</span>
+        <span style="width:60px">Loss: ${s.avg_loss_pct}%</span>
+        <span style="width:50px;color:var(--muted)">${Math.round(s.duration_sec)}s</span>
+      </div>`
+    ).join('');
+  } catch (e) {}
+}
+
+// =========================================================================
+// Traceroute history list
+// =========================================================================
+async function loadTraceHistoryList() {
+  try {
+    const resp = await fetch('/api/traceroute/history?hours=24');
+    const runs = await resp.json();
+    const list = document.getElementById('trace-history-list');
+    const empty = document.getElementById('trace-history-empty');
+    if (runs.length === 0) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    list.innerHTML = runs.map(r => {
+      const hops = JSON.parse(r.hops_json);
+      return `<div class="hop">
+        <span style="color:var(--amber);width:14px">&#9679;</span>
+        <span style="flex:1">${new Date(r.timestamp).toLocaleString()}</span>
+        <span style="width:60px">${hops.length} hops</span>
+        <span style="width:100px;color:var(--muted)">${r.target}</span>
+        <span style="width:100px;color:var(--muted)">${r.lat ? r.lat.toFixed(4)+','+r.lon.toFixed(4) : 'No GPS'}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {}
+}
+
+// =========================================================================
+// Settings loader
+// =========================================================================
+async function loadSettings() {
+  try {
+    const resp = await fetch('/api/config');
+    const cfg = await resp.json();
+    const tl = document.getElementById('settings-targets');
+    tl.innerHTML = cfg.ping.targets.map(t =>
+      `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">
+        <span style="flex:1">${t.host}</span>
+        <span style="color:var(--muted)">${t.label}</span>
+      </div>`
+    ).join('');
+    document.getElementById('thr-lat').textContent = cfg.thresholds.latency_ms;
+    document.getElementById('thr-jit').textContent = cfg.thresholds.jitter_ms;
+    document.getElementById('thr-loss').textContent = cfg.thresholds.packet_loss_pct;
+    document.getElementById('thr-dur').textContent = cfg.thresholds.sustained_sec;
+    document.getElementById('settings-gps').textContent = cfg.gps.source;
+    document.getElementById('settings-tr').textContent = cfg.traceroute.target;
+  } catch (e) {}
+}
+
+// =========================================================================
+// Starlink telemetry rendering
+// =========================================================================
+let slThroughputChart = null;
+const slDlHistory = [];
+const slUlHistory = [];
+const slLabels = [];
+
+function renderStarlink(sl) {
+  if (!sl) return;
+
+  // Status badge
+  const statusEl = document.getElementById('sl-status');
+  if (statusEl) {
+    statusEl.textContent = sl.disablement_code === 'OKAY' ? 'ONLINE' : sl.disablement_code;
+    statusEl.className = sl.disablement_code === 'OKAY' ? 'badge badge-green' : 'badge badge-red';
+  }
+
+  // KPIs
+  const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  const hrs = Math.floor(sl.uptime_s / 3600);
+  const mins = Math.floor((sl.uptime_s % 3600) / 60);
+  setEl('sl-uptime', hrs + 'h ' + mins + 'm');
+  setEl('sl-pop-latency', sl.pop_latency_ms + ' ms');
+  setEl('sl-eth', sl.eth_speed_mbps + ' Mbps');
+  setEl('sl-service', sl.class_of_service);
+  setEl('sl-hardware', sl.hardware);
+  setEl('sl-firmware', sl.firmware);
+  setEl('sl-boots', sl.boot_count);
+  setEl('sl-mobility', sl.mobility_class);
+  setEl('sl-country', sl.country);
+
+  // Throughput
+  setEl('sl-dl', sl.downlink_mbps);
+  setEl('sl-ul', sl.uplink_mbps);
+
+  // Signal
+  setEl('sl-azimuth', sl.azimuth_deg + '°');
+  setEl('sl-elevation', sl.elevation_deg + '°');
+  setEl('sl-tilt', sl.tilt_deg + '°');
+  setEl('sl-gps-sats', sl.gps_sats);
+
+  const snrEl = document.getElementById('sl-snr');
+  if (snrEl) { snrEl.textContent = sl.snr_ok ? 'OK' : 'LOW'; snrEl.style.color = sl.snr_ok ? 'var(--green)' : 'var(--red)'; }
+  const gpsLockEl = document.getElementById('sl-gps-lock');
+  if (gpsLockEl) { gpsLockEl.textContent = sl.gps_valid ? 'Yes' : 'No'; gpsLockEl.style.color = sl.gps_valid ? 'var(--green)' : 'var(--muted)'; }
+
+  // Pop latency color
+  const popEl = document.getElementById('sl-pop-latency');
+  if (popEl) popEl.style.color = sl.pop_latency_ms < 40 ? 'var(--green)' : sl.pop_latency_ms < 80 ? 'var(--amber)' : 'var(--red)';
+
+  // Obstruction
+  const obstEl = document.getElementById('sl-obstruction');
+  if (obstEl) {
+    obstEl.textContent = sl.obstruction_pct + '%';
+    obstEl.style.color = sl.obstruction_pct < 1 ? 'var(--green)' : sl.obstruction_pct < 5 ? 'var(--amber)' : 'var(--red)';
+  }
+  setEl('sl-obst-dur', sl.obstruction_duration_s + 's');
+  setEl('sl-obst-interval', Math.round(sl.obstruction_interval_s / 60) + ' min');
+  setEl('sl-obst-valid', Math.round(sl.obstruction_valid_s / 60) + ' min');
+
+  // Ready states
+  const readyEl = document.getElementById('sl-ready');
+  if (readyEl && sl.ready) {
+    readyEl.innerHTML = Object.entries(sl.ready).map(([k, v]) =>
+      `<span style="padding:2px 8px;border-radius:12px;font-size:10px;font-family:var(--mono);background:${v ? 'rgba(26,255,140,.1)' : 'rgba(255,77,77,.1)'};color:${v ? 'var(--green)' : 'var(--red)'};border:1px solid ${v ? 'var(--green-d)' : 'var(--red)'}">${k.toUpperCase()}</span>`
+    ).join('');
+  }
+
+  // Alerts
+  const alertEl = document.getElementById('sl-alerts');
+  if (alertEl) {
+    const alertKeys = Object.keys(sl.alerts || {});
+    if (alertKeys.length > 0) {
+      alertEl.innerHTML = alertKeys.map(k =>
+        `<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;background:rgba(255,176,32,.1);color:var(--amber);border:1px solid var(--amber);margin:2px">${k}</span>`
+      ).join('');
+    } else {
+      alertEl.innerHTML = '<span style="color:var(--green)">No active alerts</span>';
+    }
+  }
+
+  // Software update
+  setEl('sl-sw-state', sl.sw_update_state || 'none');
+  setEl('sl-sw-progress', Math.round(sl.sw_update_progress * 100) + '%');
+
+  // Throughput chart
+  const now = new Date().toLocaleTimeString('en-NZ', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  slDlHistory.push(sl.downlink_mbps);
+  slUlHistory.push(sl.uplink_mbps);
+  slLabels.push(now);
+  if (slLabels.length > 60) { slLabels.shift(); slDlHistory.shift(); slUlHistory.shift(); }
+
+  if (slThroughputChart) {
+    slThroughputChart.data.labels = slLabels;
+    slThroughputChart.data.datasets[0].data = slDlHistory;
+    slThroughputChart.data.datasets[1].data = slUlHistory;
+    slThroughputChart.update('none');
+  }
+}
+
+// =========================================================================
+// Starlink dish commands
+// =========================================================================
+async function slReboot() {
+  if (!confirm('Are you sure you want to reboot the Starlink dish?\n\nThis will cause a temporary loss of connectivity.')) return;
+  if (!confirm('CONFIRM: Reboot Starlink dish now?')) return;
+  try {
+    const resp = await fetch('/api/starlink/reboot', { method: 'POST' });
+    const data = await resp.json();
+    alert(data.status === 'ok' ? 'Reboot command sent. Dish will restart in a few seconds.' : 'Reboot failed: ' + data.message);
+  } catch (e) {
+    alert('Failed to send reboot command: ' + e);
+  }
+}
+
+async function slDishSpeedtest() {
+  const btn = document.getElementById('sl-speedtest-btn');
+  const panel = document.getElementById('sl-speedtest-panel');
+  const results = document.getElementById('sl-speedtest-results');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="st-spinner"></span> Testing...';
+  panel.style.display = 'block';
+  results.textContent = 'Starting dish speed test...';
+
+  try {
+    await fetch('/api/starlink/speedtest', { method: 'POST' });
+
+    // Poll for results
+    let attempts = 0;
+    const checker = setInterval(async () => {
+      attempts++;
+      results.textContent = 'Running... (' + (attempts * 3) + 's)';
+      try {
+        const resp = await fetch('/api/starlink/speedtest/status');
+        const data = await resp.json();
+        if (data.status === 'ok' && data.data) {
+          const st = data.data.dishGetSpeedtestStatus || data.data;
+          let output = '';
+          if (st.running === false || attempts > 20) {
+            clearInterval(checker);
+            // Parse results
+            const dl = st.downlinkThroughputBps ? (st.downlinkThroughputBps / 1_000_000).toFixed(1) : '--';
+            const ul = st.uplinkThroughputBps ? (st.uplinkThroughputBps / 1_000_000).toFixed(1) : '--';
+            const lat = st.latencyMs ? st.latencyMs.toFixed(1) : '--';
+            output = 'Download: ' + dl + ' Mbps\n';
+            output += 'Upload:   ' + ul + ' Mbps\n';
+            output += 'Latency:  ' + lat + ' ms\n';
+            if (st.result) output += 'Result:   ' + JSON.stringify(st.result, null, 2);
+            results.textContent = output || JSON.stringify(data.data, null, 2);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ti ti-gauge" style="font-size:13px"></i> Dish speed test';
+          }
+        }
+      } catch (e) { /* keep polling */ }
+      if (attempts > 30) {
+        clearInterval(checker);
+        results.textContent = 'Speed test timed out. Check dish status.';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-gauge" style="font-size:13px"></i> Dish speed test';
+      }
+    }, 3000);
+  } catch (e) {
+    results.textContent = 'Failed to start: ' + e;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-gauge" style="font-size:13px"></i> Dish speed test';
+  }
+}
+
+// =========================================================================
+// Init — backfill historical data then start live polling
+// =========================================================================
+async function backfillCharts() {
+  try {
+    // Backfill ping history for each known target
+    const stateResp = await fetch('/api/state');
+    const state = await stateResp.json();
+    const targets = Object.keys(state.ping);
+    for (const host of targets) {
+      const resp = await fetch(`/api/ping/history?target=${host}&minutes=10`);
+      const data = await resp.json();
+      if (data.length === 0) continue;
+      const p = state.ping[host];
+      const c = getColor(host);
+      if (!knownTargets.has(host)) {
+        knownTargets.add(host);
+        latChart.data.datasets.push({
+          label: p.label || host, data: [], borderColor: c.border,
+          backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5
+        });
+      }
+      if (!knownLossTargets.has(host)) {
+        knownLossTargets.add(host);
+        lossChartOverview.data.datasets.push({
+          label: p.label || host, data: [], borderColor: c.border,
+          backgroundColor: c.bg, fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5
+        });
+      }
+      if (!jitterData[host]) jitterData[host] = [];
+      const idx = [...knownTargets].indexOf(host);
+      const lidx = [...knownLossTargets].indexOf(host);
+      data.forEach(d => {
+        const t = new Date(d.timestamp).toLocaleTimeString('en-NZ', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        if (idx === 0 && !latChart.data.labels.includes(t)) {
+          latChart.data.labels.push(t);
+          lossChartOverview.data.labels.push(t);
+          jitterLabels.push(t);
+        }
+        latChart.data.datasets[idx].data.push(d.latency_ms);
+        lossChartOverview.data.datasets[lidx].data.push(d.loss_pct);
+        jitterData[host].push(d.jitter_ms);
+      });
+    }
+    // Trim to max points
+    while (latChart.data.labels.length > MAX_CHART_POINTS) {
+      latChart.data.labels.shift();
+      lossChartOverview.data.labels.shift();
+      jitterLabels.shift();
+      latChart.data.datasets.forEach(ds => ds.data.shift());
+      lossChartOverview.data.datasets.forEach(ds => ds.data.shift());
+      Object.keys(jitterData).forEach(h => jitterData[h].shift());
+    }
+    latChart.update('none');
+    lossChartOverview.update('none');
+    lastPingState = state.ping;
+    // Render current traceroute and speed
+    if (state.traceroute && state.traceroute.hops && state.traceroute.hops.length > 0) renderHops(state.traceroute.hops);
+    if (state.speedtest && state.speedtest.timestamp) renderSpeed(state.speedtest);
+  } catch (e) { console.warn('Backfill failed:', e); }
+}
+
+backfillCharts();
+poll();
+pollTimer = setInterval(poll, 3000);
+loadBadSpots();
+loadSpeedHistory();
+setInterval(loadBadSpots, 60000);
+</script>
+</body>
+</html>

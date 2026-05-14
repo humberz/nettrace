@@ -1,0 +1,8 @@
+Future enhancements
+
+Store data so even after power loss / reboot dashboard data is intact
+Authentication for dashboard 
+Remote managed by cloudflare
+Ubuntu - imaged for quick install 
+Log file saved so it will remain post power outage 
+Ability to query local Starlink api (signal quality / obstruction)
