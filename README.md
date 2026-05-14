@@ -181,3 +181,31 @@ sudo bash scripts/uninstall.sh
 - Python 3.10+
 - Network tools: fping, mtr
 - GPS: Starlink dish, 4G router with GPS, or USB GPS dongle
+
+## Hardware Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| CPU | 2-core ARMv8 / x86-64 | 4-core (Raspberry Pi 4, Intel N100) |
+| RAM | 2 GB | 4 GB |
+| Storage | 16 GB | 32–64 GB (SSD preferred) |
+| OS | Ubuntu 22.04 / Debian 12 | Same |
+
+### What drives those numbers
+
+**RAM:** Prometheus + Grafana containers use ~150–300 MB each at rest. Flask/Gunicorn + collector threads add ~100–150 MB. 2 GB is workable but tight — Prometheus will struggle on long routes with 30-day retention enabled.
+
+**Storage:** Prometheus TSDB at 5s scrape intervals with 3 ping targets generates ~500 MB–1 GB/month. Docker images + OS consume ~5–8 GB. Use a quality A2-rated SD card or a USB SSD — constant Prometheus writes will kill a cheap SD card quickly.
+
+**CPU:** fping, mtr, and GPS polling are lightweight. Grafana rendering and Prometheus queries spike briefly — 2 cores is sufficient, 4 is comfortable.
+
+### Recommended devices
+
+| Device | Notes |
+|--------|-------|
+| Raspberry Pi 4 (4 GB) | Ideal — low power, compact, passive cooling possible |
+| Raspberry Pi 5 (4 GB) | Better performance headroom |
+| Intel N100 mini PC | Best option if mains power is available |
+| Raspberry Pi 3 (1 GB) | Not recommended — RAM too tight for the Docker stack |
+
+**Power:** A Raspberry Pi 4 draws 3–7 W. A 12V → 5V USB-C buck converter from the vehicle supply works well.
